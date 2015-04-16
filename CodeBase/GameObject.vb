@@ -35,9 +35,9 @@ MustInherit Class GameObject
     Protected MustOverride Sub UpdateObject()
 
     ' delegate types and events
-    Protected Delegate Sub GameObjectClickEventHandler(ByVal gobj As GameObject, ByVal kind As DotClickKind, ByVal location As DotLocation)
-    Protected Event OnClick As GameObjectClickEventHandler
-    Protected Event OnExternClick As GameObjectClickEventHandler
+    Public Delegate Sub GameObjectClickEventHandler(ByVal gobj As GameObject, ByVal kind As DotClickKind, ByVal location As DotLocation)
+    Public Event OnClick As GameObjectClickEventHandler
+    Public Event OnExternClick As GameObjectClickEventHandler
 
     Sub New()
         ' store a reference to the object in a global collection
@@ -235,4 +235,23 @@ MustInherit Class GameObject
             bounds.location = value
         End Set
     End Property
+End Class
+
+' Represents an unrendered object that is used to hook into the object system
+Class DummyObject
+    Inherits GameObject
+
+    Public Event OnUpdateHook As EventHandler
+
+    Sub New()
+        health = 1
+    End Sub
+
+    Protected Overrides Sub RenderObject(surface As SlimDX.Direct2D.RenderTarget)
+        Exit Sub
+    End Sub
+
+    Protected Overrides Sub UpdateObject()
+        RaiseEvent OnUpdateHook(Me, New EventArgs)
+    End Sub
 End Class

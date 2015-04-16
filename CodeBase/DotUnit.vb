@@ -6,30 +6,55 @@ Imports System.Drawing
 Imports DrawSurface = SlimDX.Direct2D.RenderTarget
 Imports DrawBrush = SlimDX.Direct2D.SolidColorBrush
 
-Class DotUnitInfo
-    Protected team As Integer
-    Protected radius As Integer
-    Protected maxHealth As Integer
-    Protected speed As Double
+MustInherit Class DotUnitInfo
+    Public Event OnUpdateInfo As EventHandler
 
-    Function GetTeam() As Integer
-        GetTeam = team
-    End Function
-    Function GetRadius() As Integer
-        GetRadius = radius
-    End Function
-    Function GetMaxHealth() As Integer
-        GetMaxHealth = maxHealth
-    End Function
-    Function GetSpeed() As Double
-        GetSpeed = speed
-    End Function
+    Private teamv As Integer
+    Private radiusv As Integer
+    Private maxHealthv As Integer
+    Private speedv As Double
+
+    ' getters and setters; some of these trigger an update event
+    Property Team As Integer
+        Get
+            Return teamv
+        End Get
+        Set(value As Integer)
+            teamv = value
+        End Set
+    End Property
+    Property Radius As Integer
+        Get
+            Return radiusv
+        End Get
+        Set(value As Integer)
+            radiusv = value
+            RaiseEvent OnUpdateInfo(Me, New EventArgs)
+        End Set
+    End Property
+    Property MaxHealth As Integer
+        Get
+            Return maxHealthv
+        End Get
+        Set(value As Integer)
+            maxHealthv = value
+        End Set
+    End Property
+    Property Speed As Double
+        Get
+            Return speedv
+        End Get
+        Set(value As Double)
+            speedv = value
+            RaiseEvent OnUpdateInfo(Me, New EventArgs)
+        End Set
+    End Property
 End Class
 
 Class DotUnit
     Inherits GameObject
 
-    Private info As DotUnitInfo
+    WithEvents info As DotUnitInfo
     Private idle As Boolean = True ' if False, then dot is traveling to 'heading'
     Private speed As Double ' 1 unit is 5 screen pixels per update cycle
     Private veloc As DotVector
@@ -39,10 +64,10 @@ Class DotUnit
 
     Sub New(ByVal info As DotUnitInfo)
         Me.info = info
-        Me.health = info.GetMaxHealth()
-        Me.speed = info.GetSpeed()
-        Me.bounds.width = info.GetRadius()
-        Me.bounds.height = info.GetRadius()
+        Me.health = info.MaxHealth
+        Me.speed = info.Speed
+        Me.bounds.width = info.Radius * 2
+        Me.bounds.height = info.Radius * 2
     End Sub
 
     ' send the dot to a location
@@ -50,7 +75,8 @@ Class DotUnit
         Dim dir As Double
         Dim dx, dy As Integer
 
-        heading = location
+        heading = location - New DotLocation(bounds.width \ 2, bounds.height \ 2)
+        speed = info.Speed
 
         ' compute direction
         dx = heading.px - bounds.location.px
@@ -60,6 +86,7 @@ Class DotUnit
         ' use direction to get final vector
         dir = veloc.GetDirection()
         veloc = New DotVector(dir, speed, False)
+        accel = New DotVector(dir, 0.5, False)
 
         idle = False
     End Sub
@@ -83,9 +110,19 @@ Class DotUnit
         End Get
     End Property
 
+    Overrides Property Location As DotLocation
+        ' we refer to the center of the dot for its location
+        Get
+            Return MyBase.Location + New DotLocation(bounds.width \ 2, bounds.height \ 2)
+        End Get
+        Set(value As DotLocation)
+            MyBase.Location = value
+        End Set
+    End Property
+
     Protected Overrides Sub RenderObject(ByVal surface As DrawSurface)
         Dim e As New SlimDX.Direct2D.Ellipse
-        Dim br = BRUSHES(info.GetTeam())
+        Dim br = BRUSHES(info.Team)
         e.Center = Location.GetRelativeLocation().ToPoint()
         e.RadiusX = bounds.width \ 2
         e.RadiusY = bounds.height \ 2
@@ -95,7 +132,7 @@ Class DotUnit
             oldColor = br.Color
             newColor = oldColor
 
-            newColor.Alpha = 0.5! * (CSng(health) / CSng(info.GetMaxHealth()))
+            newColor.Alpha = 0.5! * (CSng(health) / CSng(info.MaxHealth))
             br.Color = newColor
             surface.FillEllipse(br, e)
 
@@ -112,9 +149,10 @@ Class DotUnit
 
             ' apply acceleration vector
             veloc += accel
+            speed = veloc.GetMagnitude()
 
             ' check to see if the dot has arrived at its destination
-            If Math.Abs(remain.cx) < Math.Abs(veloc.cx) OrElse Math.Abs(remain.cy) < Math.Abs(veloc.cy) Then
+            If Math.Abs(remain.cx) < Math.Abs(veloc.cx) AndAlso Math.Abs(remain.cy) < Math.Abs(veloc.cy) Then
                 bounds.location = heading
                 Halt()
                 Exit Sub
@@ -125,10 +163,10 @@ Class DotUnit
             bounds.location.py += CInt(Math.Round(veloc.cy))
 
             ' if the dot is nearing the destination, then slow it down for effect
-            If remain.GetMagnitude() < speed Then
+            If remain.GetMagnitude() < info.Radius Then
                 ' the distance left is less than the dot's speed, so apply acceleration
                 ' in the opposite direction
-                veloc += New DotVector(remain.GetDirection(), speed / 1.1, False)
+                veloc += New DotVector(remain.GetDirection() + Math.PI, speed / 2, False)
             Else
                 ' keep the dot on the straight and narrow by realigning it to its heading
                 veloc = New DotVector(remain.GetDirection(), speed, False)
@@ -139,27 +177,27 @@ Class DotUnit
         End If
     End Sub
 
-    Overrides Property Location As DotLocation
-        ' we refer to the center of the dot for its location
-        Get
-            Return MyBase.Location + New DotLocation(bounds.width \ 2, bounds.height \ 2)
-        End Get
-        Set(value As DotLocation)
-            MyBase.Location = value
-        End Set
-    End Property
+    Private Sub OnUpdateInfo(ByVal sender As Object, ByVal e As EventArgs) Handles info.OnUpdateInfo
+        ' update radius
+        bounds.width = info.Radius * 2
+        bounds.height = info.Radius * 2
+
+        ' update speed
+        speed = info.Speed
+    End Sub
 End Class
 
+' This DotUnit derivation is for testing and should not be used with a squad
 Class DotTest
     Inherits DotUnit
 
     Private Class DotTestInfo
         Inherits DotUnitInfo
         Sub New(ByVal dotTeam As Integer)
-            maxHealth = 10
-            radius = 50
-            speed = 2.55
-            team = dotTeam
+            MaxHealth = 10
+            Radius = 50
+            Speed = 20.55
+            Team = dotTeam
         End Sub
     End Class
 
@@ -168,7 +206,9 @@ Class DotTest
     End Sub
 
     Private Sub DotTest_OnClick(ByVal gobj As GameObject, ByVal kind As DotClickKind, ByVal location As DotLocation) Handles Me.OnClick
-        Me.Touch()
+        If kind = DotClickKind.Click1 Then
+            Me.Touch()
+        End If
     End Sub
 
     Private Sub DotTest_OnExternClick(ByVal gobj As GameObject, ByVal kind As DotClickKind, ByVal location As DotLocation) Handles Me.OnExternClick
@@ -177,5 +217,28 @@ Class DotTest
         ElseIf kind = DotClickKind.Click2 And Selected Then
             Me.SendTo(location)
         End If
+    End Sub
+End Class
+
+' Unit info for common unit types
+Class DotFodderInfo
+    Inherits DotUnitInfo
+
+    Sub New(ByVal teamValue As Integer)
+        MaxHealth = 5
+        Radius = 5
+        Speed = 5.77
+        Team = teamValue
+    End Sub
+End Class
+
+Class DotInfantryInfo
+    Inherits DotUnitInfo
+
+    Sub New(ByVal teamValue As Integer)
+        MaxHealth = 20
+        Radius = 17
+        Speed = 15.67
+        Team = teamValue
     End Sub
 End Class

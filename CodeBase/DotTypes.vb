@@ -79,6 +79,8 @@ Structure DotLocation
     Shared wx As Integer = 0
     Shared wy As Integer = 0
 
+    Shared ReadOnly InvalidLocation As New DotLocation(-1, -1)
+
     Dim px, py As Integer
 
     Sub New(ByVal x As Integer, ByVal y As Integer)
@@ -150,6 +152,7 @@ Enum DotClickKind
     Click1
     Click1_shift
     Click1_ctrl
+    Click1_alt
     Click2
     Click2_shift
     Click2_ctrl

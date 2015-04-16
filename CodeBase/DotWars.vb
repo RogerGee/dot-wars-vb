@@ -30,9 +30,13 @@ Module DotWars
     Private swapChain As SwapChain
 
     ' testing
-    Dim test As New DotTest
+    Dim testA As New DotSquad(GetType(DotFodderInfo), 100, 1)
+    Dim testB As New DotSquad(GetType(DotInfantryInfo), 81, 1)
+    Dim testC As New DotSquad(GetType(DotFodderInfo), 225, 1)
 
     Sub Main()
+        Randomize()
+
         frame = New RenderForm("DotWars - v" + APP_VERSION)
         With frame
             .ClientSize = New Size(FRAME_WIDTH, FRAME_HEIGHT)
@@ -114,13 +118,14 @@ Module DotWars
         renderTarget.EndDraw()
         swapChain.Present(1, PresentFlags.None)
 
-        Thread.Sleep(10)
+        Thread.Sleep(16)
     End Sub
 
     Sub frame_Click(ByVal sender As Object, ByVal args As MouseEventArgs)
         Dim kind As DotClickKind
-        Dim shift = GetAsyncKeyState(Keys.Shift) <> 0
-        Dim ctrl = GetAsyncKeyState(Keys.Control) <> 0
+        Dim shift = (GetAsyncKeyState(&H10) And 32768) <> 0
+        Dim ctrl = (GetAsyncKeyState(&H11) And 32768) <> 0
+        Dim alt = (GetAsyncKeyState(&H12) And 32768) <> 0
 
         ' get click kind
         Select Case args.Button
@@ -129,6 +134,8 @@ Module DotWars
                     kind = DotClickKind.Click1_shift
                 ElseIf ctrl Then
                     kind = DotClickKind.Click1_ctrl
+                ElseIf alt Then
+                    kind = DotClickKind.Click1_alt
                 Else
                     kind = DotClickKind.Click1
                 End If

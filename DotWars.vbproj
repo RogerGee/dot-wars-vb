@@ -67,6 +67,7 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CodeBase\DotSquad.vb" />
     <Compile Include="CodeBase\DotTypes.vb" />
     <Compile Include="CodeBase\DotUnit.vb" />
     <Compile Include="CodeBase\DotWars.vb" />
