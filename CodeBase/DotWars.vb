@@ -15,13 +15,22 @@ Imports Resource = SlimDX.Direct3D11.Resource
 Imports Factory = SlimDX.Direct2D.Factory
 
 Module DotWars
+    ' declares
+    Public Declare Function GetAsyncKeyState Lib "User32.dll" (ByVal key As Integer) As Short
+
+    ' constants
     Const APP_VERSION = "0.1"
-    Const FRAME_WIDTH = 800
-    Const FRAME_HEIGHT = 600
+    Public Const FRAME_WIDTH = 800
+    Public Const FRAME_HEIGHT = 600
+
+    ' private globals
     Private frame As RenderForm
     Private directDevice As Device
     Private renderTarget As RenderTarget
     Private swapChain As SwapChain
+
+    ' testing
+    Dim test As New DotTest
 
     Sub Main()
         frame = New RenderForm("DotWars - v" + APP_VERSION)
@@ -85,11 +94,11 @@ Module DotWars
         End Using
 
         ' init other modules
-        GameObject.InitGameObject(renderTarget)
+        GameObject.BeginGameObjects(renderTarget)
     End Sub
 
     Sub Direct3D_Cleanup()
-        GameObject.DestroyGameObject()
+        GameObject.EndGameObjects()
         renderTarget.Dispose()
         swapChain.Dispose()
         directDevice.Dispose()
@@ -100,7 +109,7 @@ Module DotWars
         renderTarget.Transform = Matrix3x2.Identity
         renderTarget.Clear(New Color4(Color.White))
 
-
+        GameObject.RenderGameObjects(renderTarget)
 
         renderTarget.EndDraw()
         swapChain.Present(1, PresentFlags.None)
@@ -109,6 +118,38 @@ Module DotWars
     End Sub
 
     Sub frame_Click(ByVal sender As Object, ByVal args As MouseEventArgs)
+        Dim kind As DotClickKind
+        Dim shift = GetAsyncKeyState(Keys.Shift) <> 0
+        Dim ctrl = GetAsyncKeyState(Keys.Control) <> 0
 
+        ' get click kind
+        Select Case args.Button
+            Case MouseButtons.Left
+                If shift Then
+                    kind = DotClickKind.Click1_shift
+                ElseIf ctrl Then
+                    kind = DotClickKind.Click1_ctrl
+                Else
+                    kind = DotClickKind.Click1
+                End If
+            Case MouseButtons.Right
+                If shift Then
+                    kind = DotClickKind.Click2_shift
+                ElseIf ctrl Then
+                    kind = DotClickKind.Click2_ctrl
+                Else
+                    kind = DotClickKind.Click2
+                End If
+            Case Else
+                If shift Then
+                    kind = DotClickKind.Click3_shift
+                ElseIf ctrl Then
+                    kind = DotClickKind.Click3_ctrl
+                Else
+                    kind = DotClickKind.Click3
+                End If
+        End Select
+
+        GameObject.ClickGameObjects(kind, New DotLocation(args.Location, True))
     End Sub
 End Module
