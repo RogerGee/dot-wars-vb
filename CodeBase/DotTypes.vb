@@ -118,6 +118,27 @@ Structure DotLocation
     Shared Operator -(ByVal left As DotLocation, ByVal right As DotLocation) As DotLocation
         Return New DotLocation(left.px - right.px, left.py - right.py)
     End Operator
+
+    Shared Sub WorldUp(ByVal amount As Integer)
+        wy -= amount
+        If wy < 0 Then
+            wy = 0
+        End If
+    End Sub
+    Shared Sub WorldDown(ByVal amount As Integer)
+        wy += amount
+
+    End Sub
+    Shared Sub WorldLeft(ByVal amount As Integer)
+        wx -= amount
+        If wx < 0 Then
+            wx = 0
+        End If
+    End Sub
+    Shared Sub WorldRight(ByVal amount As Integer)
+        wx += amount
+
+    End Sub
 End Structure
 
 ' Represents a vector in 2-space
@@ -138,6 +159,10 @@ Structure DotVector
         Return New DotVector(left.cx + right.cx, left.cy + right.cy)
     End Operator
 
+    Shared Operator -(ByVal unaryOperand As DotVector) As DotVector
+        Return New DotVector(-unaryOperand.cx, -unaryOperand.cy)
+    End Operator
+
     Function GetDirection() As Double
         GetDirection = Atan2(cy, cx)
     End Function
@@ -145,6 +170,18 @@ Structure DotVector
     Function GetMagnitude() As Double
         ' get the distance between the origin and the point (cx, cy)
         GetMagnitude = Sqrt(cx * cx + cy * cy)
+    End Function
+
+    Sub SetMagnitude(ByVal magnitude As Double)
+        ' get direction
+        Dim dir As Double
+        dir = GetDirection()
+        cx = magnitude * Cos(dir)
+        cy = magnitude * Sin(dir)
+    End Sub
+
+    Function ToLocation() As DotLocation
+        Return New DotLocation(CInt(Round(cx)), CInt(Round(cy)))
     End Function
 End Structure
 

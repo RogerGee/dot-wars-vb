@@ -63,6 +63,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="SlimDX, Version=4.0.13.43, Culture=neutral, PublicKeyToken=b1b0c32fd1ffe4f9, processorArchitecture=x86" />
+    <Reference Include="System" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
@@ -71,7 +72,19 @@
     <Compile Include="CodeBase\DotTypes.vb" />
     <Compile Include="CodeBase\DotUnit.vb" />
     <Compile Include="CodeBase\DotWars.vb" />
+    <Compile Include="CodeBase\DotWeapon.vb" />
     <Compile Include="CodeBase\GameObject.vb" />
+    <Compile Include="Forms\StartForm.Designer.vb">
+      <DependentUpon>StartForm.vb</DependentUpon>
+    </Compile>
+    <Compile Include="Forms\StartForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Forms\StartForm.resx">
+      <DependentUpon>StartForm.vb</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

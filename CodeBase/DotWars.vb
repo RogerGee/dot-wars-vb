@@ -28,13 +28,18 @@ Module DotWars
     Private directDevice As Device
     Private renderTarget As RenderTarget
     Private swapChain As SwapChain
-
-    ' testing
-    Dim testA As New DotSquad(GetType(DotFodderInfo), 100, 1)
-    Dim testB As New DotSquad(GetType(DotInfantryInfo), 81, 1)
-    Dim testC As New DotSquad(GetType(DotFodderInfo), 225, 1)
+    Private framerate As Integer = 16
 
     Sub Main()
+        Dim teams As Integer()
+        Dim startupForm As New StartForm
+
+        If startupForm.ShowDialog() = DialogResult.Cancel Then
+            End
+        End If
+        teams = startupForm.DotWarsSelections
+        startupForm = Nothing
+
         Randomize()
 
         frame = New RenderForm("DotWars - v" + APP_VERSION)
@@ -51,14 +56,55 @@ Module DotWars
         ' Initialize Direct3D
         Direct3D_Init()
 
+        ' Initialize the game
+        GameInit(teams(0))
+
+        Testing(teams)
+
         ' Run the game loop
+        framerate = 50 ' for testing (and battery performance until I find something better)
         MessagePump.Run(frame, AddressOf GameLoop)
 
         ' Cleanup operations
         Direct3D_Cleanup()
     End Sub
 
-    Sub Direct3D_Init()
+    Sub Testing(ByVal teams As Integer())
+        Dim testA As New DotSquad(GetType(DotFodderInfo), GetType(DotMeleeWeaponInfo), 100, teams(0))
+        Dim testB As New DotSquad(GetType(DotInfantryInfo), GetType(DotDashWeaponInfo), 100, teams(0))
+        Dim testC As New DotSquad(GetType(DotInfantryInfo), GetType(DotMeleeWeaponInfo), 225, teams(0))
+        Dim enemyTestA As New DotSquad(GetType(DotInfantryInfo), GetType(DotMeleeWeaponInfo), 225, teams(1))
+        enemyTestA.SendTo(New DotLocation(500, 500))
+
+        testA.Arm(Of DotMeleeWeapon)()
+        testB.Arm(Of DotDashWeapon)()
+    End Sub
+
+    Sub CheckWorldMotion()
+        Dim w = (GetAsyncKeyState(&H57) And 32768) <> 0
+        Dim a = (GetAsyncKeyState(&H41) And 32768) <> 0
+        Dim s = (GetAsyncKeyState(&H53) And 32768) <> 0
+        Dim d = (GetAsyncKeyState(&H44) And 32768) <> 0
+
+        ' we want 10 pixels at 60 fps
+        Dim mag As Integer
+        mag = CInt(Math.Round(10.0 / 16.0 * framerate))
+
+        If w Then
+            DotLocation.WorldUp(mag)
+        End If
+        If a Then
+            DotLocation.WorldLeft(mag)
+        End If
+        If s Then
+            DotLocation.WorldDown(mag)
+        End If
+        If d Then
+            DotLocation.WorldRight(mag)
+        End If
+    End Sub
+
+    Private Sub Direct3D_Init()
         ''' Initialize Direct 3D 11 (this mostly follows the SlimDX tutorial online)
 
         Dim desc As New SwapChainDescription
@@ -96,32 +142,37 @@ Module DotWars
         Using factory = swapChain.GetParent(Of DXGI.Factory)()
             factory.SetWindowAssociation(frame.Handle, WindowAssociationFlags.IgnoreAltEnter)
         End Using
-
-        ' init other modules
-        GameObject.BeginGameObjects(renderTarget)
     End Sub
 
-    Sub Direct3D_Cleanup()
+    Private Sub Direct3D_Cleanup()
         GameObject.EndGameObjects()
         renderTarget.Dispose()
         swapChain.Dispose()
         directDevice.Dispose()
     End Sub
 
-    Sub GameLoop()
+    Private Sub GameInit(ByVal playerTeam As Integer)
+        GameObject.BeginGameObjects(renderTarget, playerTeam)
+
+    End Sub
+
+    Private Sub GameLoop()
         renderTarget.BeginDraw()
         renderTarget.Transform = Matrix3x2.Identity
         renderTarget.Clear(New Color4(Color.White))
+
+        ' check for world location updates
+        CheckWorldMotion()
 
         GameObject.RenderGameObjects(renderTarget)
 
         renderTarget.EndDraw()
         swapChain.Present(1, PresentFlags.None)
 
-        Thread.Sleep(16)
+        Thread.Sleep(framerate)
     End Sub
 
-    Sub frame_Click(ByVal sender As Object, ByVal args As MouseEventArgs)
+    Private Sub frame_Click(ByVal sender As Object, ByVal args As MouseEventArgs)
         Dim kind As DotClickKind
         Dim shift = (GetAsyncKeyState(&H10) And 32768) <> 0
         Dim ctrl = (GetAsyncKeyState(&H11) And 32768) <> 0

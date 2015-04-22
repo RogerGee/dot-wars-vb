@@ -56,13 +56,15 @@ Class DotUnit
 
     WithEvents info As DotUnitInfo
     Private idle As Boolean = True ' if False, then dot is traveling to 'heading'
-    Private speed As Double ' 1 unit is 5 screen pixels per update cycle
+    Private speed As Double ' 1 unit is 1 screen pixel per update cycle
     Private veloc As DotVector
     Private accel As DotVector
+    Private idlev As DotVector
     Private heading As DotLocation
     Private sel As Boolean = False
 
     Sub New(ByVal info As DotUnitInfo)
+        MyBase.New(info.Team)
         Me.info = info
         Me.health = info.MaxHealth
         Me.speed = info.Speed
@@ -96,12 +98,22 @@ Class DotUnit
         idle = True
     End Sub
 
+    ' select the dot
     Sub Touch()
         sel = True
     End Sub
 
+    ' de-select the dot
     Sub Ignore()
         sel = False
+    End Sub
+
+    Overrides Sub AttackObject(ByVal obj As GameObject)
+        ' send the dot towards the target
+        SendTo(obj.Location)
+
+        ' call the base functionality
+        MyBase.AttackObject(obj)
     End Sub
 
     ReadOnly Property Selected As Boolean
@@ -122,7 +134,7 @@ Class DotUnit
 
     Protected Overrides Sub RenderObject(ByVal surface As DrawSurface)
         Dim e As New SlimDX.Direct2D.Ellipse
-        Dim br = BRUSHES(info.Team)
+        Dim br = BRUSHES(team)
         e.Center = Location.GetRelativeLocation().ToPoint()
         e.RadiusX = bounds.width \ 2
         e.RadiusY = bounds.height \ 2
@@ -184,6 +196,13 @@ Class DotUnit
 
         ' update speed
         speed = info.Speed
+    End Sub
+
+    Private Sub OnInRange(ByVal sender As Object, ByVal e As EventArgs) Handles weapon.OnInRange
+        ' we are targeting something and have gotten in range, so we can stop
+        ' moving; this is mostly for ranged units so that we can see them firing
+        ' from a distance
+        Halt()
     End Sub
 End Class
 

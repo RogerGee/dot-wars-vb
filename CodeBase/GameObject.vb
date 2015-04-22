@@ -21,13 +21,17 @@ MustInherit Class GameObject
     Protected Shared GREEN_BRUSH As DrawBrush
 
     Private Shared gameObjects As New Collection(Of GameObject)
+    Private Shared playerTeam As Integer ' team that the player owns
+
     Private Shared updateThreadCond As Boolean
     Private Shared updateThread As Thread
     Private Shared updateLock As New Object
 
     Protected bounds As DotRectangle
-
+    Protected teamv As Integer
     Protected health As Integer = 0
+    Protected WithEvents weapon As DotWeapon
+
     Private decompose As Integer = 180 ' seconds till dead object is "decomposed"
 
     ' "virtual" functions
@@ -36,14 +40,18 @@ MustInherit Class GameObject
 
     ' delegate types and events
     Public Delegate Sub GameObjectClickEventHandler(ByVal gobj As GameObject, ByVal kind As DotClickKind, ByVal location As DotLocation)
-    Public Event OnClick As GameObjectClickEventHandler
-    Public Event OnExternClick As GameObjectClickEventHandler
+    Public Delegate Sub GameObjectTargetedEventHandler(ByVal gobj As GameObject, ByRef squad As DotSquad)
+    Public Event OnClick As GameObjectClickEventHandler ' raised when player game object is clicked; gets ref to player object clicked
+    Public Event OnExternClick As GameObjectClickEventHandler ' raised when player game object is not clicked; gets ref to foreign object if possible
+    Public Event OnTargeted As GameObjectTargetedEventHandler ' raised when the game object is targeted by another object
 
-    Sub New()
+    Sub New(ByVal teamValue As Integer)
+        teamv = teamValue
+
         ' store a reference to the object in a global collection
         SyncLock updateLock
             Dim i = 0
-            While i < gameObjects.Count AndAlso Not gameObjects(i) Is Nothing
+            While i < gameObjects.Count AndAlso gameObjects(i) IsNot Nothing
                 i += 1
             End While
             If i < gameObjects.Count Then
@@ -54,12 +62,15 @@ MustInherit Class GameObject
         End SyncLock
     End Sub
 
-    Shared Sub BeginGameObjects(ByVal surface As DrawSurface)
+    Shared Sub BeginGameObjects(ByVal surface As DrawSurface, ByVal team As Integer)
+        playerTeam = team
+
         ' load brush resources
         BRUSHES(0) = New DrawBrush(surface, New SlimDX.Color4(Color.Black)) ' BLACK
         BRUSHES(1) = New DrawBrush(surface, New SlimDX.Color4(Color.Red)) ' RED
         BRUSHES(2) = New DrawBrush(surface, New SlimDX.Color4(Color.Blue)) ' BLUE
         BRUSHES(3) = New DrawBrush(surface, New SlimDX.Color4(Color.Green)) ' GREEN
+        BRUSHES(4) = New DrawBrush(surface, New SlimDX.Color4(Color.Yellow)) ' YELLOW
 
         BLACK_BRUSH = BRUSHES(0)
         RED_BRUSH = BRUSHES(1)
@@ -80,7 +91,7 @@ MustInherit Class GameObject
         Dim rendering As New Collection(Of GameObject)
         SyncLock updateLock
             For Each obj In gameObjects
-                If Not obj Is Nothing Then rendering.Add(obj)
+                If obj IsNot Nothing Then rendering.Add(obj)
             Next
         End SyncLock
 
@@ -91,15 +102,19 @@ MustInherit Class GameObject
             If obj.bounds.Overlaps(viewableRect) Then
                 obj.Render(surface)
             End If
+
+            ' render the object's weapon
+            If obj.weapon IsNot Nothing AndAlso obj.weapon.IsFiring Then obj.weapon.Render(surface, BRUSHES(obj.teamv))
         Next
     End Sub
 
     Shared Sub ClickGameObjects(ByVal kind As DotClickKind, ByVal target As DotLocation)
-        ' obtain a collection of objects to click in the critical region
+        ' obtain a collection of objects to click in the critical region; these objects must
+        ' be associated with the player team
         Dim clicking As New Collection(Of GameObject)
         SyncLock updateLock
             For Each obj In gameObjects
-                If Not obj Is Nothing Then clicking.Add(obj)
+                If obj IsNot Nothing AndAlso (playerTeam = obj.team OrElse obj.team = -1) Then clicking.Add(obj)
             Next
         End SyncLock
 
@@ -112,7 +127,7 @@ MustInherit Class GameObject
     Shared Sub EndGameObjects()
         ' delete the DirectX brush resources
         For Each br In BRUSHES
-            If Not br Is Nothing Then
+            If br IsNot Nothing Then
                 br.Dispose()
             End If
         Next
@@ -134,21 +149,19 @@ MustInherit Class GameObject
                                   ticks * timeout / 1000 Mod seconds = 0
 
         While updateThreadCond
-            ' let each object update itself in some way
-            SyncLock updateLock
-                For Each obj In gameObjects
-                    ' note: dead objects do not get their update actions invoked
-                    If Not obj Is Nothing AndAlso Not obj.IsDead() Then
-                        obj.UpdateObject()
-                    End If
-                Next
-            End SyncLock
+            For Each obj In gameObjects
+                ' note: dead objects do not get their update actions invoked
+                If obj IsNot Nothing AndAlso Not obj.IsDead() Then
+                    obj.UpdateObject() ' let each object update itself in some way
+                    If obj.weapon IsNot Nothing Then obj.weapon.Update(gameObjects, playerTeam) ' update object's weapon
+                End If
+            Next
 
             ' every second, update the dead objects' decompose counter
             If has_time_elapsed(1) Then
                 SyncLock updateLock
                     For i = 0 To gameObjects.Count - 1
-                        If Not gameObjects(i) Is Nothing AndAlso gameObjects(i).IsDead() Then
+                        If gameObjects(i) IsNot Nothing AndAlso gameObjects(i).IsDead() Then
                             If gameObjects(i).decompose <= 0 Then
                                 gameObjects(i) = Nothing
                             Else
@@ -188,9 +201,45 @@ MustInherit Class GameObject
             ' rectangle for the object
             RaiseEvent OnClick(Me, kind, location - bounds.location)
         Else
+            ' see if the click occurred over a foreign game object
+            Dim o As GameObject = Nothing
+            For Each obj In gameObjects
+                If obj IsNot Nothing AndAlso obj.team <> playerTeam AndAlso location.IsWithin(obj.bounds) Then
+                    o = obj
+                    Exit For
+                End If
+            Next
             ' raise the OnExternClick event; leave the location alone
-            RaiseEvent OnExternClick(Me, kind, location)
+            RaiseEvent OnExternClick(o, kind, location)
         End If
+    End Sub
+
+    Sub Arm(ByVal weaponType As Type, ByVal weaponInfo As DotWeaponInfo)
+        ' create a weapon of the specified type using the specified info
+        weapon = CType(Activator.CreateInstance(weaponType, weaponInfo), DotWeapon)
+    End Sub
+
+    Sub CeaseFire()
+        If weapon IsNot Nothing Then weapon.CeaseFire()
+    End Sub
+
+    ' this means, target Me, which raises an event to obtain the DotSquad (if any)
+    ' to which the object is attached
+    Sub Target(ByRef squad As DotSquad)
+        RaiseEvent OnTargeted(Me, squad)
+    End Sub
+
+    Overridable Sub AttackObject(ByVal obj As GameObject)
+        If weapon Is Nothing Then Exit Sub
+
+        ' the default behavior is to attempt to fire on
+        ' the object from the current location; this will
+        ' fail if the object is out of range
+        weapon.FireOn(Me, obj)
+    End Sub
+
+    Sub DealDamage(ByVal amt As Integer)
+        Me.health -= amt
     End Sub
 
     ReadOnly Property BoundingRectangle As DotRectangle
@@ -235,6 +284,12 @@ MustInherit Class GameObject
             bounds.location = value
         End Set
     End Property
+
+    ReadOnly Property Team As Integer
+        Get
+            Return teamv
+        End Get
+    End Property
 End Class
 
 ' Represents an unrendered object that is used to hook into the object system
@@ -244,6 +299,7 @@ Class DummyObject
     Public Event OnUpdateHook As EventHandler
 
     Sub New()
+        MyBase.New(-1)
         health = 1
     End Sub
 
