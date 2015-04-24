@@ -93,6 +93,10 @@ Class DotUnit
         idle = False
     End Sub
 
+    Sub PortTo(ByVal position As DotLocation)
+        Location = position
+    End Sub
+
     ' stop the dot in its tracks
     Sub Halt()
         idle = True
@@ -128,27 +132,21 @@ Class DotUnit
             Return MyBase.Location + New DotLocation(bounds.width \ 2, bounds.height \ 2)
         End Get
         Set(value As DotLocation)
-            MyBase.Location = value
+            MyBase.Location = value - New DotLocation(bounds.width \ 2, bounds.height \ 2)
         End Set
     End Property
 
-    Protected Overrides Sub RenderObject(ByVal surface As DrawSurface)
+    Protected Overrides Sub RenderObject(ByVal surface As DrawSurface, ByVal br As DrawBrush)
         Dim e As New SlimDX.Direct2D.Ellipse
-        Dim br = BRUSHES(team)
         e.Center = Location.GetRelativeLocation().ToPoint()
         e.RadiusX = bounds.width \ 2
         e.RadiusY = bounds.height \ 2
 
         If Selected Then
-            Dim oldColor, newColor As SlimDX.Color4
-            oldColor = br.Color
-            newColor = oldColor
-
-            newColor.Alpha = 0.5! * (CSng(health) / CSng(info.MaxHealth))
-            br.Color = newColor
+            Dim clr As SlimDX.Color4
+            BrushAlpha(br, 0.5! * (CSng(health) / CSng(info.MaxHealth)), clr)
             surface.FillEllipse(br, e)
-
-            br.Color = oldColor
+            br.Color = clr
         End If
 
         surface.DrawEllipse(br, e)
@@ -204,6 +202,12 @@ Class DotUnit
         ' from a distance
         Halt()
     End Sub
+
+    Private Sub OnOutOfRange(ByVal target As GameObject) Handles weapon.OnOutOfRange
+        ' we should pursue the enemy if they go out of range; the weapon will try to 
+        ' reaquire a set number of times before disengaging the target
+        Me.AttackObject(target)
+    End Sub
 End Class
 
 ' This DotUnit derivation is for testing and should not be used with a squad
@@ -258,6 +262,17 @@ Class DotInfantryInfo
         MaxHealth = 20
         Radius = 17
         Speed = 15.67
+        Team = teamValue
+    End Sub
+End Class
+
+Class DotCalvaryInfo
+    Inherits DotUnitInfo
+
+    Sub New(ByVal teamValue As Integer)
+        MaxHealth = 80
+        Radius = 34
+        Speed = 26.717
         Team = teamValue
     End Sub
 End Class

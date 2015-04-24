@@ -14,11 +14,16 @@ Imports DrawBrush = SlimDX.Direct2D.SolidColorBrush
 ' to manage all instances of the class that are instantiated, along with methods to render,
 ' click and update those objects
 MustInherit Class GameObject
-    Protected Shared BRUSHES(0 To 9) As DrawBrush
-    Protected Shared BLACK_BRUSH As DrawBrush
-    Protected Shared RED_BRUSH As DrawBrush
-    Protected Shared BLUE_BRUSH As DrawBrush
-    Protected Shared GREEN_BRUSH As DrawBrush
+    Private Shared BRUSHES(0 To 9) As DrawBrush ' all colors
+    Private Shared BLUE_BRUSH As DrawBrush ' team colors
+    Private Shared GREEN_BRUSH As DrawBrush
+    Private Shared YELLOW_BRUSH As DrawBrush
+    Private Shared ORANGE_BRUSH As DrawBrush
+    Private Shared PURPLE_BRUSH As DrawBrush
+    Private Shared PINK_BRUSH As DrawBrush
+    Private Shared GRAY_BRUSH As DrawBrush
+    Private Shared RED_BRUSH As DrawBrush ' non-team colors
+    Private Shared BLACK_BRUSH As DrawBrush
 
     Private Shared gameObjects As New Collection(Of GameObject)
     Private Shared playerTeam As Integer ' team that the player owns
@@ -27,15 +32,17 @@ MustInherit Class GameObject
     Private Shared updateThread As Thread
     Private Shared updateLock As New Object
 
+    Private Const DECOMP_SEC = 30
+
     Protected bounds As DotRectangle
     Protected teamv As Integer
     Protected health As Integer = 0
     Protected WithEvents weapon As DotWeapon
 
-    Private decompose As Integer = 180 ' seconds till dead object is "decomposed"
+    Private decompose As Integer = DECOMP_SEC ' seconds till dead object is "decomposed"
 
     ' "virtual" functions
-    Protected MustOverride Sub RenderObject(ByVal surface As DrawSurface)
+    Protected MustOverride Sub RenderObject(ByVal surface As DrawSurface, ByVal br As DrawBrush)
     Protected MustOverride Sub UpdateObject()
 
     ' delegate types and events
@@ -44,6 +51,7 @@ MustInherit Class GameObject
     Public Event OnClick As GameObjectClickEventHandler ' raised when player game object is clicked; gets ref to player object clicked
     Public Event OnExternClick As GameObjectClickEventHandler ' raised when player game object is not clicked; gets ref to foreign object if possible
     Public Event OnTargeted As GameObjectTargetedEventHandler ' raised when the game object is targeted by another object
+    Public Event OnDeath As EventHandler ' raised when the object dies
 
     Sub New(ByVal teamValue As Integer)
         teamv = teamValue
@@ -66,16 +74,27 @@ MustInherit Class GameObject
         playerTeam = team
 
         ' load brush resources
-        BRUSHES(0) = New DrawBrush(surface, New SlimDX.Color4(Color.Black)) ' BLACK
-        BRUSHES(1) = New DrawBrush(surface, New SlimDX.Color4(Color.Red)) ' RED
-        BRUSHES(2) = New DrawBrush(surface, New SlimDX.Color4(Color.Blue)) ' BLUE
-        BRUSHES(3) = New DrawBrush(surface, New SlimDX.Color4(Color.Green)) ' GREEN
-        BRUSHES(4) = New DrawBrush(surface, New SlimDX.Color4(Color.Yellow)) ' YELLOW
+        '  team colors
+        BRUSHES(0) = New DrawBrush(surface, New SlimDX.Color4(Color.Blue)) ' BLUE
+        BRUSHES(1) = New DrawBrush(surface, New SlimDX.Color4(Color.Green)) ' GREEN
+        BRUSHES(2) = New DrawBrush(surface, New SlimDX.Color4(Color.Yellow)) ' YELLOW
+        BRUSHES(3) = New DrawBrush(surface, New SlimDX.Color4(Color.Orange)) ' ORANGE
+        BRUSHES(4) = New DrawBrush(surface, New SlimDX.Color4(Color.Purple)) ' PURPLE
+        BRUSHES(5) = New DrawBrush(surface, New SlimDX.Color4(Color.Pink)) ' PINK
+        BRUSHES(6) = New DrawBrush(surface, New SlimDX.Color4(Color.Gray)) ' GRAY
+        '  non-team colors
+        BRUSHES(8) = New DrawBrush(surface, New SlimDX.Color4(Color.Red)) ' RED
+        BRUSHES(9) = New DrawBrush(surface, New SlimDX.Color4(Color.Black)) ' BLACK
 
-        BLACK_BRUSH = BRUSHES(0)
-        RED_BRUSH = BRUSHES(1)
-        BLUE_BRUSH = BRUSHES(2)
-        GREEN_BRUSH = BRUSHES(3)
+        BLUE_BRUSH = BRUSHES(0)
+        GREEN_BRUSH = BRUSHES(1)
+        YELLOW_BRUSH = BRUSHES(2)
+        ORANGE_BRUSH = BRUSHES(3)
+        PURPLE_BRUSH = BRUSHES(4)
+        PINK_BRUSH = BRUSHES(5)
+        GRAY_BRUSH = BRUSHES(6)
+        RED_BRUSH = BRUSHES(8)
+        BLACK_BRUSH = BRUSHES(9)
 
         ' start update thread
         updateThread = New Thread(New ThreadStart(AddressOf GameObjects_UpdateThread))
@@ -91,7 +110,7 @@ MustInherit Class GameObject
         Dim rendering As New Collection(Of GameObject)
         SyncLock updateLock
             For Each obj In gameObjects
-                If obj IsNot Nothing Then rendering.Add(obj)
+                If obj IsNot Nothing AndAlso obj.teamv >= 0 Then rendering.Add(obj)
             Next
         End SyncLock
 
@@ -114,7 +133,8 @@ MustInherit Class GameObject
         Dim clicking As New Collection(Of GameObject)
         SyncLock updateLock
             For Each obj In gameObjects
-                If obj IsNot Nothing AndAlso (playerTeam = obj.team OrElse obj.team = -1) Then clicking.Add(obj)
+                If obj IsNot Nothing AndAlso Not obj.IsDead() AndAlso _
+                    (playerTeam = obj.Team OrElse obj.Team = -1) Then clicking.Add(obj)
             Next
         End SyncLock
 
@@ -149,13 +169,16 @@ MustInherit Class GameObject
                                   ticks * timeout / 1000 Mod seconds = 0
 
         While updateThreadCond
-            For Each obj In gameObjects
-                ' note: dead objects do not get their update actions invoked
-                If obj IsNot Nothing AndAlso Not obj.IsDead() Then
-                    obj.UpdateObject() ' let each object update itself in some way
-                    If obj.weapon IsNot Nothing Then obj.weapon.Update(gameObjects, playerTeam) ' update object's weapon
-                End If
-            Next
+            SyncLock updateLock
+                For Each obj In gameObjects
+                    ' note: dead objects do not get their update actions invoked; their warheads
+                    ' still need to be updated in case they are finishing
+                    If obj IsNot Nothing Then
+                        If Not obj.IsDead() Then obj.UpdateObject() ' let each object update itself in some way
+                        If obj.weapon IsNot Nothing Then obj.weapon.Update(gameObjects, obj.teamv) ' update object's weapon
+                    End If
+                Next
+            End SyncLock
 
             ' every second, update the dead objects' decompose counter
             If has_time_elapsed(1) Then
@@ -184,13 +207,27 @@ MustInherit Class GameObject
     End Function
 
     Sub Render(ByVal surface As DrawSurface)
-        RenderObject(surface)
+        Dim br As DrawBrush
+        Dim dper As Single
+        Dim clr As SlimDX.Color4
+        br = BRUSHES(teamv)
+        dper = CSng(decompose) / CSng(DECOMP_SEC)
+        If IsDead() Then
+            BrushAlpha(br, dper, clr)
+            RenderObject(surface, br)
+            br.Color = clr
+        Else
+            RenderObject(surface, br)
+        End If
 
         ' draw red X of death if dead
         If IsDead() Then
             Dim localRect As New DotRectangle(bounds.location.GetRelativeLocation(), bounds.size)
+
+            BrushAlpha(RED_BRUSH, dper, clr)
             surface.DrawLine(RED_BRUSH, localRect.TopLeftCorner().ToPoint(), localRect.BotRightCorner().ToPoint())
             surface.DrawLine(RED_BRUSH, localRect.TopRightCorner().ToPoint(), localRect.BotLeftCorner().ToPoint())
+            RED_BRUSH.Color = clr
         End If
     End Sub
 
@@ -204,7 +241,8 @@ MustInherit Class GameObject
             ' see if the click occurred over a foreign game object
             Dim o As GameObject = Nothing
             For Each obj In gameObjects
-                If obj IsNot Nothing AndAlso obj.team <> playerTeam AndAlso location.IsWithin(obj.bounds) Then
+                If obj IsNot Nothing AndAlso Not obj.IsDead() AndAlso obj.Team <> playerTeam _
+                    AndAlso location.IsWithin(obj.bounds) Then
                     o = obj
                     Exit For
                 End If
@@ -214,9 +252,11 @@ MustInherit Class GameObject
         End If
     End Sub
 
-    Sub Arm(ByVal weaponType As Type, ByVal weaponInfo As DotWeaponInfo)
-        ' create a weapon of the specified type using the specified info
+    Sub Arm(ByVal weaponType As Type, ByVal weaponInfo As DotWeaponInfo, Optional ByVal killHandler As DotWeapon.DotWeaponEventHandler = Nothing)
+        ' create a weapon of the specified type using the specified info; add
+        ' a kill handler if specified
         weapon = CType(Activator.CreateInstance(weaponType, weaponInfo), DotWeapon)
+        If killHandler IsNot Nothing Then AddHandler weapon.OnTargetKilled, killHandler
     End Sub
 
     Sub CeaseFire()
@@ -239,7 +279,9 @@ MustInherit Class GameObject
     End Sub
 
     Sub DealDamage(ByVal amt As Integer)
+        Dim was = Me.IsDead()
         Me.health -= amt
+        If Not was AndAlso Me.IsDead() Then RaiseEvent OnDeath(Me, New EventArgs)
     End Sub
 
     ReadOnly Property BoundingRectangle As DotRectangle
@@ -290,6 +332,11 @@ MustInherit Class GameObject
             Return teamv
         End Get
     End Property
+
+    Private Sub IDied(ByVal sender As Object, ByVal e As EventArgs) Handles Me.OnDeath
+        ' I can't fire if I'm dead...
+        Me.CeaseFire()
+    End Sub
 End Class
 
 ' Represents an unrendered object that is used to hook into the object system
@@ -303,7 +350,7 @@ Class DummyObject
         health = 1
     End Sub
 
-    Protected Overrides Sub RenderObject(surface As SlimDX.Direct2D.RenderTarget)
+    Protected Overrides Sub RenderObject(ByVal surface As DrawSurface, ByVal br As DrawBrush)
         Exit Sub
     End Sub
 

@@ -13,6 +13,7 @@ Imports SlimDX.Windows
 Imports Device = SlimDX.Direct3D11.Device
 Imports Resource = SlimDX.Direct3D11.Resource
 Imports Factory = SlimDX.Direct2D.Factory
+Imports DrawBrush = SlimDX.Direct2D.SolidColorBrush
 
 Module DotWars
     ' declares
@@ -20,18 +21,19 @@ Module DotWars
 
     ' constants
     Const APP_VERSION = "0.1"
-    Public Const FRAME_WIDTH = 800
-    Public Const FRAME_HEIGHT = 600
+    Public FRAME_WIDTH As Integer
+    Public FRAME_HEIGHT As Integer
 
     ' private globals
+    Private teams As Integer()
     Private frame As RenderForm
     Private directDevice As Device
     Private renderTarget As RenderTarget
     Private swapChain As SwapChain
     Private framerate As Integer = 16
+    Private moveVector As New Point(0, 0)
 
     Sub Main()
-        Dim teams As Integer()
         Dim startupForm As New StartForm
 
         If startupForm.ShowDialog() = DialogResult.Cancel Then
@@ -44,14 +46,20 @@ Module DotWars
 
         frame = New RenderForm("DotWars - v" + APP_VERSION)
         With frame
-            .ClientSize = New Size(FRAME_WIDTH, FRAME_HEIGHT)
-            .FormBorderStyle = FormBorderStyle.FixedSingle
+            '.ClientSize = New Size(FRAME_WIDTH, FRAME_HEIGHT)
+            .WindowState = FormWindowState.Normal
+            .FormBorderStyle = FormBorderStyle.None
+            .Bounds = Screen.PrimaryScreen.Bounds
             .MaximizeBox = False
             .Icon = Nothing
         End With
+        FRAME_WIDTH = frame.ClientSize.Width
+        FRAME_HEIGHT = frame.ClientSize.Height
 
         ' add event handlers for main frame
         AddHandler frame.MouseClick, AddressOf frame_Click
+        AddHandler frame.KeyUp, AddressOf frame_KeyUp
+        AddHandler frame.MouseMove, AddressOf frame_MouseMove
 
         ' Initialize Direct3D
         Direct3D_Init()
@@ -59,25 +67,12 @@ Module DotWars
         ' Initialize the game
         GameInit(teams(0))
 
-        Testing(teams)
-
         ' Run the game loop
-        framerate = 50 ' for testing (and battery performance until I find something better)
+        framerate = 16
         MessagePump.Run(frame, AddressOf GameLoop)
 
         ' Cleanup operations
         Direct3D_Cleanup()
-    End Sub
-
-    Sub Testing(ByVal teams As Integer())
-        Dim testA As New DotSquad(GetType(DotFodderInfo), GetType(DotMeleeWeaponInfo), 100, teams(0))
-        Dim testB As New DotSquad(GetType(DotInfantryInfo), GetType(DotDashWeaponInfo), 100, teams(0))
-        Dim testC As New DotSquad(GetType(DotInfantryInfo), GetType(DotMeleeWeaponInfo), 225, teams(0))
-        Dim enemyTestA As New DotSquad(GetType(DotInfantryInfo), GetType(DotMeleeWeaponInfo), 225, teams(1))
-        enemyTestA.SendTo(New DotLocation(500, 500))
-
-        testA.Arm(Of DotMeleeWeapon)()
-        testB.Arm(Of DotDashWeapon)()
     End Sub
 
     Sub CheckWorldMotion()
@@ -86,22 +81,32 @@ Module DotWars
         Dim s = (GetAsyncKeyState(&H53) And 32768) <> 0
         Dim d = (GetAsyncKeyState(&H44) And 32768) <> 0
 
-        ' we want 10 pixels at 60 fps
+        ' we want 10 pixels at 60 fps: if the user is using the mouse, try make
+        ' it 20 pixels (this way they can fine tune with keyboard and move around
+        ' quickly with the mouse)
         Dim mag As Integer
-        mag = CInt(Math.Round(10.0 / 16.0 * framerate))
+        mag = CInt(Math.Round(If(w OrElse a OrElse s OrElse d, 10.0, 20.0) / 16.0 * framerate))
 
-        If w Then
+        If w OrElse moveVector.Y < 0 Then
             DotLocation.WorldUp(mag)
         End If
-        If a Then
+        If a OrElse moveVector.X < 0 Then
             DotLocation.WorldLeft(mag)
         End If
-        If s Then
+        If s OrElse moveVector.Y > 0 Then
             DotLocation.WorldDown(mag)
         End If
-        If d Then
+        If d OrElse moveVector.X > 0 Then
             DotLocation.WorldRight(mag)
         End If
+    End Sub
+
+    Sub BrushAlpha(ByVal br As DrawBrush, ByVal percent As Single, ByRef holdColor As SlimDX.Color4)
+        Dim clr As SlimDX.Color4
+        holdColor = br.Color
+        clr = holdColor
+        clr.Alpha = percent
+        br.Color = clr
     End Sub
 
     Private Sub Direct3D_Init()
@@ -159,7 +164,7 @@ Module DotWars
     Private Sub GameLoop()
         renderTarget.BeginDraw()
         renderTarget.Transform = Matrix3x2.Identity
-        renderTarget.Clear(New Color4(Color.White))
+        renderTarget.Clear(New Color4(Color.Black))
 
         ' check for world location updates
         CheckWorldMotion()
@@ -209,5 +214,53 @@ Module DotWars
         End Select
 
         GameObject.ClickGameObjects(kind, New DotLocation(args.Location, True))
+    End Sub
+
+    Private Sub frame_KeyUp(ByVal sender As Object, ByVal e As KeyEventArgs)
+        If e.KeyCode = Keys.Escape Then
+            End
+        ElseIf e.KeyCode = Keys.T Then
+            ' testing action
+            Dim sqds = New DotSquad() { _
+                New DotSquad(GetType(DotInfantryInfo), 49, teams(0)), _
+                New DotSquad(GetType(DotFodderInfo), 25, teams(0)), _
+                New DotSquad(GetType(DotInfantryInfo), 49, teams(1)), _
+                New DotSquad(GetType(DotFodderInfo), 25, teams(1)), _
+                New DotSquad(GetType(DotCalvaryInfo), 16, teams(0))
+            }
+
+            sqds(0).Arm(GetType(DotStarWeapon), GetType(DotRangedWeaponInfoC))
+            sqds(0).PortTo(New DotLocation(20, 20))
+            sqds(1).Arm(GetType(DotMeleeWeapon), GetType(DotMeleeWeaponInfo))
+            sqds(1).PortTo(New DotLocation(50, 400))
+            sqds(2).Arm(GetType(DotDashWeapon), GetType(DotRangedWeaponInfoC))
+            sqds(2).PortTo(New DotLocation(20 + 1800, 20 + 1800))
+            sqds(3).Arm(GetType(DotMeleeWeapon), GetType(DotMeleeWeaponInfo))
+            sqds(3).PortTo(New DotLocation(50 + 1800, 400 + 1800))
+
+            sqds(4).Arm(GetType(DotMeleeWeapon), GetType(DotCalvaryMeleeWeaponInfo))
+            sqds(4).SendTo(New DotLocation(1500, 0))
+
+            sqds(2).AttackSquad(sqds(0))
+            sqds(0).AttackSquad(sqds(2))
+        End If
+    End Sub
+
+    Private Sub frame_MouseMove(ByVal sender As Object, ByVal e As MouseEventArgs)
+        If e.X = 0 Then
+            moveVector.X = -1
+        ElseIf e.X = FRAME_WIDTH - 1 Then
+            moveVector.X = 1
+        Else
+            moveVector.X = 0
+        End If
+
+        If e.Y = 0 Then
+            moveVector.Y = -1
+        ElseIf e.Y = FRAME_HEIGHT - 1 Then
+            moveVector.Y = 1
+        Else
+            moveVector.Y = 0
+        End If
     End Sub
 End Module

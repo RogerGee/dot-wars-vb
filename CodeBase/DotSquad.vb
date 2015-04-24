@@ -6,7 +6,7 @@ Imports System
 ' Represents a collection of DotUnit objects that share a common weapon
 ' type, weapon info and unit info
 Class DotSquad
-    Shared WithEvents hook As New DummyObject
+    Shared hook As New DummyObject
     Shared selcounter As Integer = 0
     Private uinfo As DotUnitInfo
     Private winfo As DotWeaponInfo
@@ -15,10 +15,11 @@ Class DotSquad
     Private selpos As Integer = 0
     Private formed As Boolean = False
     Private heading As DotLocation = DotLocation.InvalidLocation
+    Private target As DotSquad = Nothing
 
-    Sub New(ByVal unitInfo As Type, ByVal weaponInfo As Type, ByVal slots As Integer, ByVal team As Integer)
+    Sub New(ByVal unitInfo As Type, ByVal slots As Integer, ByVal team As Integer)
+        ' the squad will generate its own info instance
         uinfo = CType(Activator.CreateInstance(unitInfo, team), DotUnitInfo)
-        winfo = CType(Activator.CreateInstance(weaponInfo), DotWeaponInfo)
         ReDim dots(slots - 1)
 
         For i = 0 To slots - 1
@@ -32,6 +33,19 @@ Class DotSquad
         AddHandler hook.OnExternClick, AddressOf OnExternClick
         AddHandler hook.OnUpdateHook, AddressOf OnUpdate
     End Sub
+
+    ReadOnly Property UnitInfo As DotUnitInfo
+        Get
+            ' user can modify this because it is a reference type
+            Return uinfo
+        End Get
+    End Property
+
+    ReadOnly Property WeaponInfo As DotWeaponInfo
+        Get
+            Return winfo ' this is a reference type that the user can modify
+        End Get
+    End Property
 
     ReadOnly Property Location As DotLocation
         Get
@@ -55,11 +69,11 @@ Class DotSquad
         End Get
     End Property
 
-    Sub Arm(Of T As DotWeapon)()
-        Dim wt = GetType(T)
+    Sub Arm(ByVal weaponType As Type, ByVal weaponInfoType As Type)
+        winfo = CType(Activator.CreateInstance(weaponInfoType), DotWeaponInfo)
         For Each dot In dots
             If dot IsNot Nothing Then
-                dot.Arm(wt, winfo)
+                dot.Arm(weaponType, winfo, AddressOf Me.OnTargetKilled)
             End If
         Next
     End Sub
@@ -75,10 +89,12 @@ Class DotSquad
     Sub AttackSquad(ByVal other As DotSquad)
         Dim i As Integer
         Dim enemies = other.Units
+        If enemies.Length = 0 Then Exit Sub
 
         ' assign a target to each dot in the squad; cycle around and start re-assigning
         ' if we outnumber the enemy
         i = 0
+        target = other
         For Each dot In dots
             If dot IsNot Nothing AndAlso Not dot.IsDead() Then dot.AttackObject(enemies(i Mod enemies.Length))
             i += 1
@@ -91,6 +107,7 @@ Class DotSquad
                 dot.CeaseFire()
             End If
         Next
+        target = Nothing
     End Sub
 
     Function IsDead() As Boolean
@@ -164,6 +181,46 @@ Class DotSquad
             End If
         Next
         formed = False ' not formed, they're stacked
+        heading = location
+    End Sub
+
+    Sub PortTo(ByVal location As DotLocation)
+        Dim n As Integer = 0
+        Dim i As Integer
+        Dim cols As Integer
+        Dim ddds() As DotUnit
+        Dim l As DotLocation
+
+        ' count dots in the squad that are alive
+        ReDim ddds(dots.Length)
+        For Each dot In dots
+            If dot IsNot Nothing AndAlso Not dot.IsDead() Then
+                ddds(n) = dot
+                n += 1
+            End If
+        Next
+
+        If n = 0 Then Exit Sub
+
+        ' find dimensions for the squad that are as square as possible
+        cols = CInt(Math.Sqrt(n))
+
+        ' send the individual dots to their locations
+        i = 0
+        l = location
+        Do
+            ddds(i).PortTo(l)
+            l.px += ddds(0).Width
+
+            i += 1
+            If i Mod cols = 0 Then
+                l.px = location.px
+                l.py += ddds(0).Height
+            End If
+        Loop Until i = n
+
+        ' the squad is considered formed at this point
+        formed = True
         heading = location
     End Sub
 
@@ -248,6 +305,26 @@ Class DotSquad
     Private Sub OnTargeted(ByVal obj As GameObject, ByRef squad As DotSquad)
         ' when a dot is targeted, get its squad so that the caller can target all the dots
         squad = Me
+    End Sub
+
+    Private Sub OnTargetKilled(ByVal unit As GameObject)
+        If target IsNot Nothing Then
+            Dim n As Integer
+            Dim enemies = target.Units
+            If enemies.Length = 0 Then Exit Sub
+            ' choose a random foe to attack
+            n = enemies.Length
+            Do
+                Dim dex As Integer
+                dex = CInt(Math.Floor(enemies.Length * Rnd()))
+                If enemies(dex) IsNot Nothing AndAlso Not enemies(dex).IsDead() Then
+                    unit.AttackObject(enemies(dex))
+                    Exit Do
+                End If
+                n -= 1
+                enemies(dex) = Nothing
+            Loop Until n = 0
+        End If
     End Sub
 
     Private Sub SelectSquad()

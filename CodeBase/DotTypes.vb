@@ -5,7 +5,7 @@ Imports System
 Imports System.Drawing
 Imports System.Math
 
-' Represents a bounding rectangle and encapsuates common operations
+' Represents a bounding rectangle and encapsulates common operations
 Structure DotRectangle
     Dim location As DotLocation
     Dim width, height As Integer
@@ -170,6 +170,10 @@ Structure DotVector
     Function GetMagnitude() As Double
         ' get the distance between the origin and the point (cx, cy)
         GetMagnitude = Sqrt(cx * cx + cy * cy)
+    End Function
+
+    Function GetOrthogonal(Optional ByVal left As Boolean = True) As DotVector
+        Return If(left, New DotVector(cy, -cx), New DotVector(-cy, cx))
     End Function
 
     Sub SetMagnitude(ByVal magnitude As Double)

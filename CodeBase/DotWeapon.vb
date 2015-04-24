@@ -10,8 +10,9 @@ Imports DrawBrush = SlimDX.Direct2D.SolidColorBrush
 ' so that settings can be updated across multiple GameObject instances
 MustInherit Class DotWeaponInfo
     Private damagev As Integer ' how much damage does the weapon warhead do?
-    Private rangev As Integer  ' how far does the warhead travel? (for how many duration intervals?)
-    Private ratev As Integer   ' how often does the warhead fire?
+    Private speedv As Double   ' how fast does a warhead travel?
+    Private rangev As Integer  ' how far does the warhead travel? (pixels)
+    Private ratev As Integer   ' how often does the weapon fire?
     Private clipv As Integer   ' how many warheads can the weapon fire in sequence?
     Private reloadv As Integer ' how long does it take the weapon to reload?
 
@@ -21,6 +22,15 @@ MustInherit Class DotWeaponInfo
         End Get
         Set(value As Integer)
             damagev = value
+        End Set
+    End Property
+
+    Property Speed As Double
+        Get
+            Return speedv
+        End Get
+        Set(value As Double)
+            speedv = value
         End Set
     End Property
 
@@ -64,7 +74,11 @@ End Class
 ' An abstract base class that represents a game object's weapon; handles
 ' its rendering and its updating
 MustInherit Class DotWeapon
+    Public Delegate Sub DotWeaponEventHandler(ByVal target As GameObject)
+
     Public Event OnInRange As EventHandler
+    Public Event OnOutOfRange As DotWeaponEventHandler
+    Public Event OnTargetKilled As DotWeaponEventHandler
 
     Private ReadOnly info As DotWeaponInfo
     Private warheads As New Collection(Of DotWarhead) ' warheads fired from the weapon
@@ -120,13 +134,17 @@ MustInherit Class DotWeapon
         If IsActive Then
             ' stop the weapon if the target has died; if so, then we are done here
             If target.IsDead() Then
-                CeaseFire()
+                Dim tmp = shooter
+                CeaseFire() ' must do this first or we get a race condition
+                ' inform an event handling context that the shooter killed its target
+                RaiseEvent OnTargetKilled(tmp)
+                If Not inrange Then RaiseEvent OnInRange(Me, New EventArgs)
                 Exit Sub
             End If
 
             ' check fire and reload
             If clip > 0 Then
-                If iters Mod info.FireRate = 0 Then
+                If IsInRange() AndAlso iters Mod info.FireRate = 0 Then
                     ' fire
                     FireNewWarhead()
                     clip -= 1
@@ -178,9 +196,9 @@ MustInherit Class DotWeapon
 
         Sub New(ByVal weapon As DotWeapon, ByVal source As DotLocation, ByVal dest As DotLocation)
             loc = source
-            dur = weapon.info.Range
             veloc = New DotVector(dest.px - source.px, dest.py - source.py)
-            veloc.SetMagnitude(weapon.info.FireRate)
+            veloc.SetMagnitude(weapon.info.Speed)
+            dur = If(weapon.info.Speed = 0.0, 1, CInt(Math.Round(weapon.info.Range / weapon.info.Speed)))
         End Sub
 
         Sub Update()
@@ -261,16 +279,18 @@ MustInherit Class DotWeapon
         Next
     End Sub
 
-    Private Sub FireNewWarhead()
+    Private Function IsInRange() As Boolean
         ' We assume that this is called within a context that has checked
         ' whether this weapon 'IsActive'
+        IsInRange = False
 
         ' check to see if we are in range
         If info.Range = 0 Then
             ' range 0 demands an overlap between the two objects
-            If Not target.BoundingRectangle.Overlaps(shooter.BoundingRectangle) Then
+            If Not target.Location.IsWithin(shooter.BoundingRectangle) Then
                 inrange = False
-                Exit Sub
+                RaiseEvent OnOutOfRange(target)
+                Exit Function
             End If
         Else
             ' otherwise we compute the distance to check if in range
@@ -279,13 +299,22 @@ MustInherit Class DotWeapon
             s = shooter.Location ' cache these
             d = target.Location
             distance = New DotVector(d.px - s.px, d.py - s.py)
-            If CInt(distance.GetMagnitude()) > info.Range * info.FireRate Then
+            If CInt(distance.GetMagnitude()) > info.Range Then
                 inrange = False
-                Exit Sub
+                RaiseEvent OnOutOfRange(target)
+                Exit Function
             End If
         End If
+
         If Not inrange Then RaiseEvent OnInRange(Me, New EventArgs)
         inrange = True
+
+        Return True
+    End Function
+
+    Private Sub FireNewWarhead()
+        ' We assume that this is called within a context that has checked
+        ' whether this weapon 'IsActive'
 
         ' find a space to assign new warhead object
         Dim iter As Integer
@@ -343,6 +372,31 @@ Class DotDashWeapon
     End Sub
 End Class
 
+Class DotStarWeapon
+    Inherits DotWeapon
+
+    Sub New(ByVal winfo As DotWeaponInfo)
+        MyBase.New(winfo)
+    End Sub
+
+    Protected Overrides Sub RenderWarhead(surface As SlimDX.Direct2D.RenderTarget, brush As SlimDX.Direct2D.SolidColorBrush, warhead As DotWeapon.DotWarhead)
+        Dim dir = warhead.Vector.GetDirection()
+        Dim vs(1) As DotVector
+        vs(0) = New DotVector(dir, 5.0, False)
+        vs(1) = New DotVector(dir + Math.PI / 4.0, 5.0, False)
+
+        For i = 0 To 1
+            For j = 0 To 1
+                Dim a, b As DotLocation
+                a = warhead.Location + vs(i).ToLocation()
+                b = warhead.Location + (-vs(i)).ToLocation()
+                surface.DrawLine(brush, a.GetRelativeLocation().ToPoint(), b.GetRelativeLocation().ToPoint())
+                vs(i) = vs(i).GetOrthogonal()
+            Next
+        Next
+    End Sub
+End Class
+
 ' DotWeaponInfo subclasses
 Class DotMeleeWeaponInfo
     Inherits DotWeaponInfo
@@ -356,7 +410,19 @@ Class DotMeleeWeaponInfo
     End Sub
 End Class
 
-Class DotDashWeaponInfo
+Class DotCalvaryMeleeWeaponInfo
+    Inherits DotWeaponInfo
+
+    Sub New()
+        Clip = 1
+        ReloadRate = 2
+        FireRate = 1
+        Damage = 10
+        Range = 0
+    End Sub
+End Class
+
+Class DotRangedWeaponInfoC
     Inherits DotWeaponInfo
 
     Sub New()
@@ -364,6 +430,7 @@ Class DotDashWeaponInfo
         ReloadRate = 40
         FireRate = 20
         Damage = 5
-        Range = 80
+        Range = 750
+        Speed = 15.5
     End Sub
 End Class

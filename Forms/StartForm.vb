@@ -4,7 +4,7 @@ Imports System
 Imports System.Windows.Forms
 
 Class StartForm
-    Private teamColors As String() = New String() {"Black", "Red", "Blue", "Green", "Yellow"}
+    Private Shared teamColors As String() = New String() {"Blue", "Green", "Yellow", "Orange", "Purple", "Pink", "Gray"}
     Private selections() As Integer
 
     Public ReadOnly Property DotWarsSelections As Integer()
