@@ -240,13 +240,15 @@ MustInherit Class GameObject
         Else
             ' see if the click occurred over a foreign game object
             Dim o As GameObject = Nothing
-            For Each obj In gameObjects
-                If obj IsNot Nothing AndAlso Not obj.IsDead() AndAlso obj.Team <> playerTeam _
-                    AndAlso location.IsWithin(obj.bounds) Then
-                    o = obj
-                    Exit For
-                End If
-            Next
+            SyncLock updateLock
+                For Each obj In gameObjects
+                    If obj IsNot Nothing AndAlso Not obj.IsDead() AndAlso obj.Team <> playerTeam _
+                        AndAlso location.IsWithin(obj.bounds) Then
+                        o = obj
+                        Exit For
+                    End If
+                Next
+            End SyncLock
             ' raise the OnExternClick event; leave the location alone
             RaiseEvent OnExternClick(o, kind, location)
         End If

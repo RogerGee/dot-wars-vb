@@ -222,9 +222,9 @@ Module DotWars
         ElseIf e.KeyCode = Keys.T Then
             ' testing action
             Dim sqds = New DotSquad() { _
-                New DotSquad(GetType(DotInfantryInfo), 49, teams(0)), _
+                New DotSquad(GetType(DotInfantryInfo), 64, teams(0)), _
                 New DotSquad(GetType(DotFodderInfo), 25, teams(0)), _
-                New DotSquad(GetType(DotInfantryInfo), 49, teams(1)), _
+                New DotSquad(GetType(DotInfantryInfo), 64, teams(1)), _
                 New DotSquad(GetType(DotFodderInfo), 25, teams(1)), _
                 New DotSquad(GetType(DotCalvaryInfo), 16, teams(0))
             }

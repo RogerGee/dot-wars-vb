@@ -135,9 +135,11 @@ MustInherit Class DotWeapon
             ' stop the weapon if the target has died; if so, then we are done here
             If target.IsDead() Then
                 Dim tmp = shooter
-                CeaseFire() ' must do this first or we get a race condition
+                CeaseFire() ' do this first
                 ' inform an event handling context that the shooter killed its target
                 RaiseEvent OnTargetKilled(tmp)
+                ' if an object is out-of-range then it may be traveling to meet the enemy (which died);
+                ' so tell it to stop by saying it is in range
                 If Not inrange Then RaiseEvent OnInRange(Me, New EventArgs)
                 Exit Sub
             End If
@@ -214,10 +216,11 @@ MustInherit Class DotWeapon
             dur -= 1
         End Sub
 
-        Sub Apply(ByVal weapon As DotWeapon, ByVal enemy As GameObject)
+        Sub Apply(ByVal weapon As DotWeapon, ByVal enemy As GameObject, Optional ByVal shooter As GameObject = Nothing)
             ' see if the warhead overlaps the enemy; if so, attack the enemy and become
             ' defunct (the warhead gets destroyed when it hits its target)
-            If loc.IsWithin(enemy.BoundingRectangle) Then
+            If loc.IsWithin(enemy.BoundingRectangle) OrElse (shooter IsNot Nothing _
+                    AndAlso weapon.shooter.BoundingRectangle().Overlaps(enemy.BoundingRectangle)) Then
                 enemy.DealDamage(weapon.info.Damage)
                 defunct = True
             End If
@@ -273,7 +276,8 @@ MustInherit Class DotWeapon
         For Each obj In objects
             If obj IsNot Nothing AndAlso Not obj.IsDead AndAlso obj.Team <> team Then
                 For Each whead In warheads
-                    If whead IsNot Nothing AndAlso Not whead.IsDefunct Then whead.Apply(Me, obj)
+                    If whead IsNot Nothing AndAlso Not whead.IsDefunct Then _
+                        whead.Apply(Me, obj, If(info.Range = 0, shooter, Nothing))
                 Next
             End If
         Next
@@ -289,7 +293,7 @@ MustInherit Class DotWeapon
             ' range 0 demands an overlap between the two objects
             If Not target.Location.IsWithin(shooter.BoundingRectangle) Then
                 inrange = False
-                RaiseEvent OnOutOfRange(target)
+                RaiseEvent OnOutOfRange(target) ' we need to send these repeatedly
                 Exit Function
             End If
         Else
@@ -301,7 +305,7 @@ MustInherit Class DotWeapon
             distance = New DotVector(d.px - s.px, d.py - s.py)
             If CInt(distance.GetMagnitude()) > info.Range Then
                 inrange = False
-                RaiseEvent OnOutOfRange(target)
+                RaiseEvent OnOutOfRange(target) ' we need to send these repeatedly
                 Exit Function
             End If
         End If

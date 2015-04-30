@@ -204,9 +204,8 @@ Class DotUnit
     End Sub
 
     Private Sub OnOutOfRange(ByVal target As GameObject) Handles weapon.OnOutOfRange
-        ' we should pursue the enemy if they go out of range; the weapon will try to 
-        ' reaquire a set number of times before disengaging the target
-        Me.AttackObject(target)
+        ' we should pursue the enemy if they go out of range (so we can get back in range)
+        SendTo(target.Location)
     End Sub
 End Class
 
