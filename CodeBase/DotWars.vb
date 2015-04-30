@@ -124,6 +124,7 @@ Module DotWars
             .SwapEffect = SwapEffect.Discard
         End With
 
+        ' DriverType should be hardware for release builds
         Device.CreateWithSwapChain(DriverType.Warp, DeviceCreationFlags.BgraSupport, desc, directDevice, swapChain)
 
         Dim buffer = Surface.FromSwapChain(swapChain, 0)
@@ -132,8 +133,10 @@ Module DotWars
             Dim props As New RenderTargetProperties
 
             With props
-                .HorizontalDpi = factory.DesktopDpi.Width
-                .VerticalDpi = factory.DesktopDpi.Height
+                ' the DPI must be as close as possible to screen pixels (since
+                ' we use those units in the game logic)
+                .HorizontalDpi = 96.0 'factory.DesktopDpi.Width
+                .VerticalDpi = 96.0 ' factory.DesktopDpi.Height
                 .MinimumFeatureLevel = Direct2D.FeatureLevel.Default
                 .PixelFormat = New PixelFormat(Format.Unknown, AlphaMode.Ignore)
                 .Type = RenderTargetType.Default
