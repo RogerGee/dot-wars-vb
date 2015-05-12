@@ -33,13 +33,14 @@ MustInherit Class GameObject
     Private Shared updateLock As New Object
 
     Private Const DECOMP_SEC = 30
+    Private Const DECOMP_RATE = 0.25
 
     Protected bounds As DotRectangle
     Protected teamv As Integer
     Protected health As Integer = 0
     Protected WithEvents weapon As DotWeapon
 
-    Private decompose As Integer = DECOMP_SEC ' seconds till dead object is "decomposed"
+    Private decompose As Integer = DECOMP_SEC * CInt(1 / DECOMP_RATE) ' seconds till dead object is "decomposed"
 
     ' "virtual" functions
     Protected MustOverride Sub RenderObject(ByVal surface As DrawSurface, ByVal br As DrawBrush)
@@ -161,18 +162,24 @@ MustInherit Class GameObject
         gameObjects.Clear()
     End Sub
 
+    Const timeout As Integer = 50
+    Protected Delegate Function HasTimeElapsedDelegate(ByVal ticks As UInt64, ByVal seconds As Double) As Boolean
+    Protected Shared ReadOnly has_time_elapsed As HasTimeElapsedDelegate = Function(ticks As UInt64, seconds As Double) _
+                                                                            ticks * timeout / 1000.0 Mod seconds = 0.0
     Private Shared Sub GameObjects_UpdateThread()
         ' we handle the game logic here
-        Dim timeout = 50
-        Dim ticks As UInt64 = 0
-        Dim has_time_elapsed = Function(seconds As Integer) _
-                                  ticks * timeout / 1000 Mod seconds = 0
+        Dim ticks As UInt64 = 1
 
         While updateThreadCond
             SyncLock updateLock
-                For Each obj In gameObjects
+                ' this thread may add game objects to the global collection; the SyncLock guareentees that we
+                ' remain inside the same thread, so no deadlock occurs when an update call tries to obtain the lock
+                ' on this same thread (you think it would, but it doesn't)
+                Dim top = gameObjects.Count - 1
+                For i = 0 To top
                     ' note: dead objects do not get their update actions invoked; their warheads
                     ' still need to be updated in case they are finishing
+                    Dim obj = gameObjects(i)
                     If obj IsNot Nothing Then
                         If Not obj.IsDead() Then obj.UpdateObject() ' let each object update itself in some way
                         If obj.weapon IsNot Nothing Then obj.weapon.Update(gameObjects, obj.teamv) ' update object's weapon
@@ -181,7 +188,7 @@ MustInherit Class GameObject
             End SyncLock
 
             ' every second, update the dead objects' decompose counter
-            If has_time_elapsed(1) Then
+            If has_time_elapsed(ticks, DECOMP_RATE) Then
                 SyncLock updateLock
                     For i = 0 To gameObjects.Count - 1
                         If gameObjects(i) IsNot Nothing AndAlso gameObjects(i).IsDead() Then
@@ -195,12 +202,18 @@ MustInherit Class GameObject
                 End SyncLock
             End If
 
-            ' update ticks; if, God forbid, we every exceed 2^64, we need to reset to avoid throwing an exception
+            ' update ticks; if, God forbid, we ever exceed 2^64, we need to reset to avoid throwing an exception
             ticks = If(ticks + 1 = UInt64.MaxValue, 0UL, ticks + 1UL)
 
             Thread.Sleep(timeout)
         End While
     End Sub
+
+    Protected Shared ReadOnly Property UpdateTimeout As Integer
+        Get
+            Return timeout
+        End Get
+    End Property
 
     Function IsDead() As Boolean
         Return health <= 0
@@ -281,6 +294,7 @@ MustInherit Class GameObject
     End Sub
 
     Sub DealDamage(ByVal amt As Integer)
+        If Me.teamv < 0 Then Exit Sub ' not a "real" object
         Dim was = Me.IsDead()
         Me.health -= amt
         If Not was AndAlso Me.IsDead() Then RaiseEvent OnDeath(Me, New EventArgs)
@@ -334,6 +348,27 @@ MustInherit Class GameObject
             Return teamv
         End Get
     End Property
+
+    Private Function GetNearObjectImpl(ByVal distance As Double) As GameObject
+        For Each obj In gameObjects
+            If obj IsNot Nothing AndAlso Not obj.IsDead() AndAlso obj.teamv <> Me.teamv AndAlso obj.teamv >= 0 AndAlso _
+                New DotVector(Me.Location.px - obj.Location.px, Me.Location.py - obj.Location.py).GetMagnitude() <= distance Then
+                Return obj
+            End If
+        Next
+
+        Return Nothing
+    End Function
+    Protected Function GetNearObject(ByVal distance As Double, Optional ByVal DoMutualExclusion As Boolean = False) As GameObject
+        ' note: DoMutualExclusion should be False if called from the update thread
+        If DoMutualExclusion Then
+            SyncLock updateLock
+                GetNearObject = GetNearObjectImpl(distance)
+            End SyncLock
+        Else
+            GetNearObject = GetNearObjectImpl(distance)
+        End If
+    End Function
 
     Private Sub IDied(ByVal sender As Object, ByVal e As EventArgs) Handles Me.OnDeath
         ' I can't fire if I'm dead...

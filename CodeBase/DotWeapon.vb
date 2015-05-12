@@ -187,6 +187,12 @@ MustInherit Class DotWeapon
         End Get
     End Property
 
+    ReadOnly Property Range As Integer
+        Get
+            Return info.Range
+        End Get
+    End Property
+
     Protected MustOverride Sub RenderWarhead(ByVal surface As DrawSurface, ByVal brush As DrawBrush, ByVal warhead As DotWarhead)
 
     Protected Class DotWarhead

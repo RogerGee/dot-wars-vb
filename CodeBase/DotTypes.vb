@@ -115,8 +115,20 @@ Structure DotLocation
         Return New DotLocation(left.px + right.px, left.py + right.py)
     End Operator
 
+    Shared Operator +(ByVal left As DotLocation, ByVal right As Size) As DotLocation
+        Return New DotLocation(left.px + right.Width, left.py + right.Height)
+    End Operator
+
     Shared Operator -(ByVal left As DotLocation, ByVal right As DotLocation) As DotLocation
         Return New DotLocation(left.px - right.px, left.py - right.py)
+    End Operator
+
+    Shared Operator =(ByVal left As DotLocation, ByVal right As DotLocation) As Boolean
+        Return left.px = right.px AndAlso left.py = right.py
+    End Operator
+
+    Shared Operator <>(ByVal left As DotLocation, ByVal right As DotLocation) As Boolean
+        Return Not left = right
     End Operator
 
     Shared Sub WorldUp(ByVal amount As Integer)

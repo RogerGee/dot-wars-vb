@@ -57,19 +57,22 @@ Class DotSquad
     End Property
 
     ReadOnly Property Units As DotUnit()
-        Get
-            Dim result() As DotUnit
-            Dim army As New System.Collections.ObjectModel.Collection(Of DotUnit)
+        Get ' a collection of all the alive units in the squad
+            Dim i As Integer = 0
+            Dim result(0 To UBound(dots)) As DotUnit
             For Each dot In dots
-                If dot IsNot Nothing AndAlso Not dot.IsDead() Then army.Add(dot)
+                If dot IsNot Nothing AndAlso Not dot.IsDead() Then
+                    result(i) = dot
+                    i += 1
+                End If
             Next
-            ReDim result(0 To army.Count - 1)
-            army.CopyTo(result, 0)
+            ReDim Preserve result(0 To i - 1)
             Return result
         End Get
     End Property
 
     Sub Arm(ByVal weaponType As Type, ByVal weaponInfoType As Type)
+        ' all the dots in this squad will share the same weapon info object
         winfo = CType(Activator.CreateInstance(weaponInfoType), DotWeaponInfo)
         For Each dot In dots
             If dot IsNot Nothing Then
@@ -174,7 +177,7 @@ Class DotSquad
         heading = location
     End Sub
 
-    Sub StackUp(ByVal location As DotLocation)
+    Sub GoAndStackUpAt(ByVal location As DotLocation)
         For Each dot In dots
             If dot IsNot Nothing AndAlso Not dot.IsDead() Then
                 dot.SendTo(location)
@@ -224,6 +227,21 @@ Class DotSquad
         heading = location
     End Sub
 
+    Sub StackUpAt(ByVal Location As DotLocation)
+        For Each dot In dots
+            If dot IsNot Nothing AndAlso Not dot.IsDead() Then
+                dot.PortTo(Location)
+            End If
+        Next
+        formed = False ' not formed, they're stacked
+    End Sub
+
+    Shared ReadOnly Property IsSquadSelected As Boolean
+        Get
+            Return selcounter > 0
+        End Get
+    End Property
+
     Private Sub OnClick(ByVal gobj As GameObject, ByVal kind As DotClickKind, ByVal location As DotLocation)
         If kind = DotClickKind.Click1 OrElse kind = DotClickKind.Click1_ctrl Then
             ' only do anything if the squad is not selected; if another squad was selected (counter>0), then don't select unless
@@ -243,7 +261,7 @@ Class DotSquad
         ElseIf kind = DotClickKind.Click1_shift Then
             ' if shift is held then stack up (only the top level squad should be stacked)
             If selpos = selcounter Then
-                StackUp(gobj.Location)
+                GoAndStackUpAt(gobj.Location)
             End If
         End If
     End Sub
@@ -275,7 +293,7 @@ Class DotSquad
                 Exit Sub
             ElseIf kind = DotClickKind.Click2_shift Then
                 CeaseFire()
-                StackUp(location)
+                GoAndStackUpAt(location)
                 Exit Sub
             End If
         End If
@@ -310,9 +328,13 @@ Class DotSquad
     Private Sub OnTargetKilled(ByVal unit As GameObject)
         If target IsNot Nothing Then
             Dim n As Integer
-            Dim enemies = target.Units
-            If enemies.Length = 0 Then Exit Sub
+            Dim enemies As DotUnit()
+            If target.IsDead() Then
+                target = Nothing
+                Exit Sub
+            End If
             ' choose a random foe to attack
+            enemies = target.Units
             n = enemies.Length
             Do
                 Dim dex As Integer

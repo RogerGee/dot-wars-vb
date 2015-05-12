@@ -23,6 +23,7 @@ Module DotWars
     Const APP_VERSION = "0.1"
     Public FRAME_WIDTH As Integer
     Public FRAME_HEIGHT As Integer
+    Const TESTING_ENABLED As Boolean = True
 
     ' private globals
     Private teams As Integer()
@@ -223,29 +224,57 @@ Module DotWars
         If e.KeyCode = Keys.Escape Then
             End
         ElseIf e.KeyCode = Keys.T Then
-            ' testing action
-            Dim sqds = New DotSquad() { _
-                New DotSquad(GetType(DotInfantryInfo), 64, teams(0)), _
-                New DotSquad(GetType(DotFodderInfo), 25, teams(0)), _
-                New DotSquad(GetType(DotInfantryInfo), 64, teams(1)), _
-                New DotSquad(GetType(DotFodderInfo), 25, teams(1)), _
-                New DotSquad(GetType(DotCalvaryInfo), 16, teams(0))
-            }
+            If TESTING_ENABLED Then ' do testbed actions
+                ' unit types
+                Dim fodder = GetType(DotFodderInfo)
+                Dim infantry = GetType(DotInfantryInfo)
+                Dim calvary = GetType(DotCalvaryInfo)
 
-            sqds(0).Arm(GetType(DotStarWeapon), GetType(DotRangedWeaponInfoC))
-            sqds(0).PortTo(New DotLocation(20, 20))
-            sqds(1).Arm(GetType(DotMeleeWeapon), GetType(DotMeleeWeaponInfo))
-            sqds(1).PortTo(New DotLocation(50, 400))
-            sqds(2).Arm(GetType(DotDashWeapon), GetType(DotRangedWeaponInfoC))
-            sqds(2).PortTo(New DotLocation(20 + 1800, 20 + 1800))
-            sqds(3).Arm(GetType(DotMeleeWeapon), GetType(DotMeleeWeaponInfo))
-            sqds(3).PortTo(New DotLocation(50 + 1800, 400 + 1800))
+                ' weapon types and weapon parameter types
+                Dim dashWeapon = GetType(DotDashWeapon)
+                Dim starWeapon = GetType(DotStarWeapon)
+                Dim meleeWeapon = GetType(DotMeleeWeapon)
+                Dim rangedInfo = GetType(DotRangedWeaponInfoC)
+                Dim meleeInfo = GetType(DotMeleeWeaponInfo)
+                Dim calvaryMeleeInfo = GetType(DotCalvaryMeleeWeaponInfo)
 
-            sqds(4).Arm(GetType(DotMeleeWeapon), GetType(DotCalvaryMeleeWeaponInfo))
-            sqds(4).SendTo(New DotLocation(1500, 0))
+                ' generate player's stuff
+                Dim info As New DotUnitGeneratorInfo(teams(0), New DotRectangle(20, 20, 100, 180), 500, starWeapon, New DotRangedWeaponInfoC)
+                Dim str As DotUnitGenerator
+                Dim initial = New DotSquad(infantry, 16, teams(0))
+                With info
+                    .UnitType = fodder
+                    .WeaponType = dashWeapon
+                    .WeaponInfo = rangedInfo
+                    .Slots = 25
+                    .GenerateTime = 5
+                End With
+                str = New DotUnitGenerator(info)
+                initial.Arm(dashWeapon, rangedInfo)
 
-            sqds(2).AttackSquad(sqds(0))
-            sqds(0).AttackSquad(sqds(2))
+                ' generate enemy stuff
+                Dim sqds = New DotSquad() { _
+                    New DotSquad(infantry, 64, teams(1)), _
+                    New DotSquad(fodder, 25, teams(1)), _
+                    New DotSquad(infantry, 64, teams(1)), _
+                    New DotSquad(fodder, 25, teams(1)), _
+                    New DotSquad(calvary, 16, teams(1)), _
+                    New DotSquad(infantry, 100, teams(1))
+                }
+
+                sqds(0).Arm(starWeapon, rangedInfo)
+                sqds(0).SendTo(New DotLocation(2000, 2000))
+                sqds(1).Arm(meleeWeapon, meleeInfo)
+                sqds(1).PortTo(New DotLocation(2000, 2400))
+                sqds(2).Arm(dashWeapon, rangedInfo)
+                sqds(2).SendTo(New DotLocation(1800, 1800))
+                sqds(3).Arm(meleeWeapon, meleeInfo)
+                sqds(3).SendTo(New DotLocation(1800, 400 + 1800))
+                sqds(4).Arm(meleeWeapon, calvaryMeleeInfo)
+                sqds(4).SendTo(New DotLocation(1500, 1500))
+                sqds(5).SendTo(New DotLocation(200, 300))
+                sqds(1).AttackSquad(initial)
+            End If
         End If
     End Sub
 

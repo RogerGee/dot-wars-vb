@@ -88,7 +88,7 @@ Class DotUnit
         ' use direction to get final vector
         dir = veloc.GetDirection()
         veloc = New DotVector(dir, speed, False)
-        accel = New DotVector(dir, 0.5, False)
+        accel = New DotVector(dir, 0.1, False)
 
         idle = False
     End Sub
